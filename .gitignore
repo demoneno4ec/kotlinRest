@@ -1,0 +1,10 @@
+/.gradle/*
+/.idea
+/out
+/build
+*.iml
+*.ipr
+*.iws
+
+/resources/application.conf
+gradle/wrapper/gradle-wrapper.jar
