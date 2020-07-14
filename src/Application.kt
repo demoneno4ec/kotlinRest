@@ -1,68 +1,130 @@
 package myFirstRestApi.test
 
-import io.ktor.application.*
-import io.ktor.response.*
-import io.ktor.request.*
-import io.ktor.client.*
-import io.ktor.client.engine.apache.*
-import io.ktor.routing.*
-import io.ktor.http.*
-import io.ktor.html.*
-import kotlinx.html.*
-import kotlinx.css.*
+import io.ktor.application.Application
+import io.ktor.application.call
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.apache.Apache
+import io.ktor.http.ContentType
+import io.ktor.response.respondText
+import io.ktor.routing.get
+import io.ktor.routing.routing
+import java.sql.*
 
 fun main(args: Array<String>): Unit = io.ktor.server.netty.EngineMain.main(args)
 
 @Suppress("unused") // Referenced in application.conf
 @kotlin.jvm.JvmOverloads
 fun Application.module(testing: Boolean = false) {
-    val client = HttpClient(Apache) {
-    }
+    val dbConnection = initDB()
+    val tableName = "counter"
+    resetValue(dbConnection, tableName)
+
+    val client = HttpClient(Apache) {}
 
     routing {
         get("/") {
-            call.respondText("HELLO WORLD!", contentType = ContentType.Text.Plain)
+            val currentCounter: Int = getCurrentCounter(dbConnection, tableName)
+
+            call.respondText(currentCounter.toString(), contentType = ContentType.Text.Plain)
         }
 
-        get("/html-dsl") {
-            call.respondHtml {
-                body {
-                    h1 { +"HTML" }
-                    ul {
-                        for (n in 1..10) {
-                            li { +"$n" }
-                        }
-                    }
-                }
+        get("/plus/{value}") {
+            val incrementedValue: Int = try {
+                call.parameters["value"]?.toInt()!!
+            }catch (e: java.lang.NumberFormatException) {
+                0
             }
+
+            call.respondText(
+                    incrementValue(dbConnection, tableName, incrementedValue),
+                    contentType = ContentType.Text.Plain
+            )
         }
 
-        get("/styles.css") {
-            call.respondCss {
-                body {
-                    backgroundColor = Color.red
-                }
-                p {
-                    fontSize = 2.em
-                }
-                rule("p.myclass") {
-                    color = Color.blue
-                }
+        get("/minus/{value}") {
+            val incrementedValue: Int = try {
+                call.parameters["value"]?.toInt()!!
+            }catch (e: java.lang.NumberFormatException) {
+                0
             }
+
+            call.respondText(
+                    decrementValue(dbConnection, tableName, incrementedValue),
+                    contentType = ContentType.Text.Plain
+            )
         }
     }
 }
 
-fun FlowOrMetaDataContent.styleCss(builder: CSSBuilder.() -> Unit) {
-    style(type = ContentType.Text.CSS.toString()) {
-        +CSSBuilder().apply(builder).toString()
+fun getCurrentCounter(dbConnection: Connection, tableName: String): Int {
+
+    val statement: Statement = dbConnection.createStatement()
+    val sqlString = "select * from $tableName"
+    val rs: ResultSet = statement.executeQuery(sqlString)
+    var currentCounter = 0
+    if (rs.next()) {
+        currentCounter = rs.getInt("value")
+    }
+
+    return currentCounter
+}
+
+fun resetValue(dbConnection: Connection, tableName: String) {
+    truncateTable(dbConnection, tableName)
+    try {
+        val statement: Statement = dbConnection.createStatement()
+        val sqlString = "insert into $tableName(value) values(0);"
+        statement.execute(sqlString)
+        println("reset table $tableName!")
+    } catch (e: SQLException) {
+        println(e.message)
     }
 }
 
-fun CommonAttributeGroupFacade.style(builder: CSSBuilder.() -> Unit) {
-    this.style = CSSBuilder().apply(builder).toString().trim()
+fun truncateTable(dbConnection: Connection, tableName: String) {
+    try {
+        val statement: Statement = dbConnection.createStatement()
+        val sqlString = "truncate $tableName restart identity;"
+        statement.execute(sqlString)
+        println("truncate table $tableName!")
+    } catch (e: SQLException) {
+        println(e.message)
+    }
 }
 
-suspend inline fun ApplicationCall.respondCss(builder: CSSBuilder.() -> Unit) {
-    this.respondText(CSSBuilder().apply(builder).toString(), ContentType.Text.CSS)
+fun initDB(): Connection {
+    val dbUrl = "jdbc:postgresql://localhost:5432/firstrestapi"
+    val dbUser = "ladmin"
+    val dbPassword = "password"
+
+    return DriverManager.getConnection(dbUrl, dbUser, dbPassword)
+}
+
+fun updateValue(dbConnection: Connection, tableName: String, value: Int, currentCounter: Int): Int {
+    try {
+        val statement: Statement = dbConnection.createStatement()
+        val sqlString = "UPDATE $tableName SET value = $value WHERE value = $currentCounter;"
+        statement.execute(sqlString)
+        println("Value update $tableName, $value, $currentCounter!")
+    } catch (e: SQLException) {
+        println(e.message)
+    }
+
+    return value
+}
+
+fun incrementValue(dbConnection: Connection, tableName: String, value: Int = 0): String {
+    val currentCounter: Int = getCurrentCounter(dbConnection, tableName)
+
+    val newValue: Int = updateValue(dbConnection, tableName, currentCounter + value, currentCounter)
+
+    return "New value = $newValue, Old value $currentCounter"
+}
+
+fun decrementValue(dbConnection: Connection, tableName: String, value: Int = 0): String {
+    val currentCounter: Int = getCurrentCounter(dbConnection, tableName)
+
+    val newValue: Int = updateValue(dbConnection, tableName, currentCounter - value, currentCounter)
+
+    return "New value = $newValue, Old value $currentCounter"
 }

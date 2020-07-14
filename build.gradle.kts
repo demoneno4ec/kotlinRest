@@ -35,6 +35,7 @@ dependencies {
     implementation("io.ktor:ktor-html-builder:$ktor_version")
     implementation("org.jetbrains:kotlin-css-jvm:1.0.0-pre.31-kotlin-1.2.41")
     testImplementation("io.ktor:ktor-server-tests:$ktor_version")
+    implementation("org.postgresql:postgresql:42.2.14")
 }
 
 kotlin.sourceSets["main"].kotlin.srcDirs("src")
